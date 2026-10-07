@@ -4,217 +4,85 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { emailOk } from "@/lib/format";
+import { AuthShell } from "@/components/auth-shell";
+import { Corners, FieldError, PasswordInput } from "@/components/ui";
+
+type Errs = { nome?: string; email?: string; senha?: string; senha2?: string; form?: string };
 
 export default function Cadastro() {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [checkEmail, setCheckEmail] = useState(false);
+  const [f, setF] = useState({ nome: "", email: "", senha: "", senha2: "" });
+  const [busy, setBusy] = useState(false);
+  const [errs, setErrs] = useState<Errs>({});
+
+  const set = (k: keyof typeof f, v: string) => {
+    setF((x) => ({ ...x, [k]: v }));
+    setErrs((x) => ({ ...x, [k]: undefined, form: undefined }));
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-
-    if (password !== confirmPassword) {
-      setError("As senhas não coincidem");
-      setLoading(false);
-      return;
-    }
-
+    const n: Errs = {};
+    if (!f.nome.trim()) n.nome = "Informe seu nome.";
+    if (!emailOk(f.email)) n.email = "Digite um e-mail válido.";
+    if (f.senha.length < 6) n.senha = "A senha precisa ter pelo menos 6 caracteres.";
+    if (!n.senha && f.senha !== f.senha2) n.senha2 = "As senhas não são iguais.";
+    if (Object.keys(n).length) { setErrs(n); return; }
+    setBusy(true);
     try {
-      const res = await apiFetch("/api/auth/cadastro", {
-        method: "POST",
-        body: JSON.stringify({ name, email, password }),
-      });
-
+      const res = await apiFetch("/api/auth/cadastro", { method: "POST", body: JSON.stringify({ name: f.nome.trim(), email: f.email.trim(), password: f.senha }) });
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error);
-        return;
-      }
-
-      if (data.session) {
+      if (!res.ok) { setErrs({ form: data.error || "Não foi possível criar a conta." }); return; }
+      if (data.session?.access_token) {
         localStorage.setItem("token", data.session.access_token);
         localStorage.setItem("user", JSON.stringify(data.user));
         router.push("/dashboard");
       } else {
-        // Confirmação de e-mail habilitada no Supabase: sem sessão ainda,
-        // o login só funciona depois que o link no e-mail for confirmado.
-        setCheckEmail(true);
+        // Projeto com confirmação de e-mail ligada: não há sessão até confirmar.
+        router.push("/login");
       }
     } catch {
-      setError("Erro ao conectar com o servidor");
+      setErrs({ form: "Erro ao conectar com o servidor." });
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  if (checkEmail) {
-    return (
-      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">
-        <div className="w-full max-w-md space-y-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-7 w-7">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Verifique seu e-mail
-            </h1>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              Enviamos um link de confirmação para <strong>{email}</strong>. Abra o
-              e-mail e confirme sua conta para poder fazer login.
-            </p>
-          </div>
-          <Link
-            href="/login"
-            className="inline-block font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
-          >
-            Voltar para o login
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-black">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Criar Conta
-          </h1>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Cadastre-se para começar a controlar suas finanças
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Nome
-            </label>
-            <input
-              id="name"
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Seu nome completo"
-              className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-emerald-400"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              E-mail
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="seu@email.com"
-              className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-emerald-400"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Senha
-            </label>
-            <div className="relative mt-1">
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                className="block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 pr-12 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-emerald-400"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Confirmar Senha
-            </label>
-            <input
-              id="confirmPassword"
-              type={showPassword ? "text" : "password"}
-              required
-              minLength={6}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repita a senha"
-              className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-emerald-400"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Criando conta..." : "Cadastrar"}
-          </button>
-        </form>
-
-        <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-          Já tem uma conta?{" "}
-          <Link
-            href="/login"
-            className="font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400"
-          >
-            Entrar
-          </Link>
-        </p>
+    <AuthShell error={errs.form}>
+      <div>
+        <h1 style={{ fontSize: 44, margin: "0 0 6px" }}>Criar conta</h1>
+        <p className="muted" style={{ margin: 0 }}>Você será o administrador da família e poderá cadastrar os outros membros depois.</p>
       </div>
-    </div>
+      <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="field">
+          <label htmlFor="c-nome">Nome</label>
+          <input id="c-nome" className="input" autoComplete="name" placeholder="Seu nome completo" value={f.nome} onChange={(e) => set("nome", e.target.value)} aria-invalid={!!errs.nome || undefined} />
+          <FieldError msg={errs.nome} />
+        </div>
+        <div className="field">
+          <label htmlFor="c-email">E-mail</label>
+          <input id="c-email" className="input" type="text" inputMode="email" autoComplete="email" placeholder="voce@email.com" value={f.email} onChange={(e) => set("email", e.target.value)} aria-invalid={!!errs.email || undefined} />
+          <FieldError msg={errs.email} />
+        </div>
+        <div className="field">
+          <label htmlFor="c-senha">Senha</label>
+          <PasswordInput id="c-senha" autoComplete="new-password" placeholder="Mínimo de 6 caracteres" value={f.senha} onChange={(v) => set("senha", v)} invalid={!!errs.senha} />
+          <FieldError msg={errs.senha} />
+        </div>
+        <div className="field">
+          <label htmlFor="c-senha2">Confirmar senha</label>
+          <input id="c-senha2" className="input" type="password" autoComplete="new-password" placeholder="Repita a senha" value={f.senha2} onChange={(e) => set("senha2", e.target.value)} aria-invalid={!!errs.senha2 || undefined} />
+          <FieldError msg={errs.senha2} />
+        </div>
+        <button type="submit" className="btn btn-primary blueprint" disabled={busy} style={{ width: "100%", minHeight: 48, fontSize: 18, marginTop: 4 }}>
+          {busy ? "Criando conta…" : "Criar conta"}<Corners />
+        </button>
+      </form>
+      <p className="muted" style={{ margin: 0, textAlign: "center", fontSize: 15 }}>
+        Já tem conta? <Link href="/login">Voltar para o login</Link>
+      </p>
+    </AuthShell>
   );
 }

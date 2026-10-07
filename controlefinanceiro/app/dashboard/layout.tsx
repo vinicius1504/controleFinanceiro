@@ -1,147 +1,151 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { logout, type StoredUser } from "@/lib/auth";
 import { useLocalStorageRaw } from "@/lib/useLocalStorage";
+import { FinanceProvider, useFinance } from "@/components/finance";
+import { Corners, Icon, Logo, ToastProvider, useCompact, useTheme } from "@/components/ui";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { href: "/dashboard/contas", label: "Contas", icon: "M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" },
-  { href: "/dashboard/receitas", label: "Receitas", icon: "M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" },
-  { href: "/dashboard/categorias", label: "Categorias", icon: "M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" },
-  { href: "/dashboard/usuarios", label: "Usuários", icon: "M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" },
+const NAV = [
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/dashboard/contas", label: "Contas", icon: "receipt" },
+  { href: "/dashboard/receitas", label: "Receitas", icon: "trending" },
+  { href: "/dashboard/categorias", label: "Categorias", icon: "tag" },
+  { href: "/dashboard/usuarios", label: "Usuários", icon: "users", adminOnly: true },
 ];
 
 export default function DashboardLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   const token = useLocalStorageRaw("token");
-  const userRaw = useLocalStorageRaw("user");
-  const user: StoredUser | null = userRaw ? JSON.parse(userRaw) : null;
-  const navItems = NAV_ITEMS.filter(
-    (item) => item.href !== "/dashboard/usuarios" || user?.role === "admin"
-  );
 
   useEffect(() => {
-    // Re-read directly instead of trusting `token`: useSyncExternalStore can
-    // still be resolving its client snapshot on the render that mounts this
-    // effect, so `token` may lag one tick behind the real localStorage value.
-    if (localStorage.getItem("token") === null) {
-      router.replace("/login");
-    }
+    // Relê direto em vez de confiar em `token`: na montagem o useSyncExternalStore
+    // ainda pode estar resolvendo o snapshot do cliente.
+    if (localStorage.getItem("token") === null) router.replace("/login");
   }, [token, router]);
 
   if (token === null) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-zinc-50 dark:bg-black">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando…</p>
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+        <p className="muted" style={{ fontSize: 14 }}>Carregando…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 bg-zinc-50 dark:bg-black">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Fechar menu"
-          className="fixed inset-0 z-20 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+    <ToastProvider>
+      <FinanceProvider>
+        <Shell>{children}</Shell>
+      </FinanceProvider>
+    </ToastProvider>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const compact = useCompact();
+  const { openLancar } = useFinance();
+  const [drawer, setDrawer] = useState(false);
+  const userRaw = useLocalStorageRaw("user");
+  const user: StoredUser | null = userRaw ? JSON.parse(userRaw) : null;
+  const isAdmin = user?.role !== "membro";
+  const nav = NAV.filter((n) => !n.adminOnly || isAdmin);
+  const current = nav.find((n) => (n.href === "/dashboard" ? pathname === n.href : pathname?.startsWith(n.href)));
+
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawer(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawer]);
+
+  const showAside = !compact || drawer;
+  const lancar = () => { setDrawer(false); openLancar(); };
+
+  return (
+    <div style={{ height: "100vh", display: "flex", overflow: "hidden", position: "relative" }}>
+      {compact && drawer && <div onClick={() => setDrawer(false)} style={{ position: "fixed", inset: 0, zIndex: 39, background: "var(--color-scrim)" }} />}
+
+      {showAside && (
+        <aside style={{ width: 256, maxWidth: "86%", flex: "none", display: "flex", flexDirection: "column", gap: 22, padding: "22px 16px 16px", borderRight: "1px solid var(--color-divider)", background: "var(--color-bg)", position: compact ? "fixed" : "relative", top: 0, bottom: 0, left: 0, zIndex: 40, boxShadow: compact ? "var(--shadow-lg)" : "none", overflowY: "auto" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px" }}>
+            <Logo />
+            <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, minWidth: 0, flex: 1 }}>
+              <span className="font-heading" style={{ fontSize: 19 }}>Controle Financeiro</span>
+              <span className="muted" style={{ fontSize: 13 }}>{isAdmin ? "Administrador da família" : "Membro da família"}</span>
+            </div>
+            {compact && (
+              <button type="button" className="btn btn-ghost btn-icon" onClick={() => setDrawer(false)} aria-label="Fechar menu" style={{ width: 44, height: 44, color: "var(--color-text)" }}>
+                <Icon name="x" size={20} />
+              </button>
+            )}
+          </div>
+
+          <button type="button" className="btn btn-primary blueprint" onClick={lancar} style={{ width: "100%", minHeight: 44, fontSize: 17, gap: 8 }}>
+            <Icon name="plus" size={18} />Lançar<Corners />
+          </button>
+
+          <nav aria-label="Menu principal" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {nav.map((n) => (
+              <Link key={n.href} href={n.href} onClick={() => setDrawer(false)} className="nav-item" aria-current={current?.href === n.href ? "page" : undefined}>
+                <Icon name={n.icon} size={19} />
+                <span>{n.label}</span>
+              </Link>
+            ))}
+          </nav>
+
+          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 14, paddingTop: 16, borderTop: "1px solid var(--color-divider)" }}>
+            <ThemeSeg />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <span className="font-heading" style={{ width: 38, height: 38, flex: "none", display: "grid", placeItems: "center", background: "var(--color-accent-100)", color: "var(--color-accent-800)", fontSize: 18 }}>
+                {(user?.name || user?.email || "?").charAt(0).toUpperCase()}
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1.3 }}>
+                <span style={{ fontWeight: 500, fontSize: 14 }}>{user?.name || "Usuário"}</span>
+                <span className="muted" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.email}</span>
+              </div>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={() => logout()} style={{ width: "100%", minHeight: 40, fontSize: 15 }}>
+              <Icon name="logout" size={17} />Sair
+            </button>
+          </div>
+        </aside>
       )}
 
-      {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-zinc-200 bg-white transition-transform lg:static lg:translate-x-0 dark:border-zinc-800 dark:bg-zinc-950 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex h-16 items-center gap-2 border-b border-zinc-200 px-6 dark:border-zinc-800">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
-            CF
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {compact && (
+          <header style={{ height: 60, flex: "none", display: "flex", alignItems: "center", gap: 6, padding: "0 10px 0 6px", borderBottom: "1px solid var(--color-divider)" }}>
+            <button type="button" className="btn btn-ghost btn-icon" onClick={() => setDrawer(true)} aria-label="Abrir menu" style={{ width: 44, height: 44, color: "var(--color-text)" }}>
+              <Icon name="menu" size={22} />
+            </button>
+            <span className="font-heading" style={{ flex: 1, minWidth: 0, fontSize: 22, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{current?.label}</span>
+            <button type="button" className="btn btn-primary blueprint" onClick={lancar} style={{ minHeight: 44, padding: "0 14px", fontSize: 16 }}>
+              <Icon name="plus" size={18} />Lançar<Corners />
+            </button>
+          </header>
+        )}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          <div style={{ maxWidth: 1280, margin: "0 auto", padding: compact ? "16px 16px 48px" : "28px 36px 64px", display: "flex", flexDirection: "column", gap: compact ? 16 : 24 }}>
+            {children}
           </div>
-          <span className="font-semibold text-zinc-900 dark:text-zinc-50">
-            Controle Financeiro
-          </span>
         </div>
-
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {navItems.map((item) => {
-            const active =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname?.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50"
-                }`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5 shrink-0">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                </svg>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
-          <div className="mb-3 flex items-center gap-3 px-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              {(user?.name || user?.email || "?").charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                {user?.name || "Usuário"}
-              </p>
-              <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                {user?.email}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3m0 0l-3 3m3-3H3" />
-            </svg>
-            Sair
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center gap-3 border-b border-zinc-200 bg-white px-4 lg:hidden dark:border-zinc-800 dark:bg-zinc-950">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-6 w-6">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-            </svg>
-          </button>
-          <span className="font-semibold text-zinc-900 dark:text-zinc-50">
-            Controle Financeiro
-          </span>
-        </header>
-
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+    </div>
+  );
+}
+
+function ThemeSeg() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="seg" role="radiogroup" aria-label="Tema" style={{ width: "100%" }}>
+      <label className="seg-opt" style={{ flex: 1, justifyContent: "center", minHeight: 40 }}>
+        <input type="radio" name="tema" checked={theme === "light"} onChange={() => setTheme("light")} /><Icon name="sun" size={16} />Claro
+      </label>
+      <label className="seg-opt" style={{ flex: 1, justifyContent: "center", minHeight: 40 }}>
+        <input type="radio" name="tema" checked={theme === "dark"} onChange={() => setTheme("dark")} /><Icon name="moon" size={16} />Escuro
+      </label>
     </div>
   );
 }

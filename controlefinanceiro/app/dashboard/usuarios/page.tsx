@@ -1,238 +1,199 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, type StoredUser } from "@/lib/auth";
+import { br, emailOk } from "@/lib/format";
+import { useFinance } from "@/components/finance";
+import { ErrorBanner, LoadingSkeleton, PageHeader } from "@/components/page";
+import { Corners, FieldError, Icon, Modal, ModalHeader, PasswordInput, useCompact, useToast } from "@/components/ui";
 
-type Usuario = {
-  id: string;
-  name: string;
-  email: string;
-  created_at: string;
-};
-
-const emptyForm = { name: "", email: "", password: "" };
+type Usuario = { id: string; name: string; email: string; created_at: string };
+type Row = Usuario & { admin: boolean; isYou: boolean };
 
 export default function UsuariosPage() {
-  const isAdmin = getStoredUser()?.role === "admin";
-
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const router = useRouter();
+  const toast = useToast();
+  const compact = useCompact();
+  const { askConfirm } = useFinance();
+  const [me, setMe] = useState<StoredUser | null>(null);
+  const [membros, setMembros] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [mf, setMf] = useState<{ nome: string; email: string; senha: string } | null>(null);
+  const [merrs, setMerrs] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const res = await apiFetch("/api/usuarios");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setUsuarios(data.usuarios ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar usuários");
+      setMembros(data.usuarios ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar usuários");
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    if (isAdmin) load();
-    else setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function openNew() {
-    setForm(emptyForm);
-    setShowForm(true);
-  }
+  useEffect(() => {
+    const u = getStoredUser();
+    setMe(u);
+    if (u?.role === "membro") router.replace("/dashboard");
+    else load();
+  }, [load, router]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const setM = (k: "nome" | "email" | "senha", v: string) => {
+    setMf((f) => (f ? { ...f, [k]: v } : f));
+    setMerrs((e) => { const n = { ...e }; delete n[k]; delete n.form; return n; });
+  };
+
+  async function saveMember(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!mf) return;
+    const e: Record<string, string> = {};
+    if (!mf.nome.trim()) e.nome = "Informe o nome completo.";
+    if (!emailOk(mf.email)) e.email = "Digite um e-mail válido.";
+    else if (membros.some((u) => u.email.toLowerCase() === mf.email.trim().toLowerCase()) || me?.email.toLowerCase() === mf.email.trim().toLowerCase()) e.email = "Esse e-mail já está na família.";
+    if (mf.senha.length < 6) e.senha = "A senha precisa ter pelo menos 6 caracteres.";
+    if (Object.keys(e).length) { setMerrs(e); return; }
     setSaving(true);
-    setError("");
     try {
-      const res = await apiFetch("/api/usuarios", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
+      const res = await apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify({ name: mf.nome.trim(), email: mf.email.trim(), password: mf.senha }) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setShowForm(false);
-      await load();
+      if (!res.ok) throw new Error(data.error || "Erro ao adicionar membro");
+      setMembros((list) => [...list, data.usuario]);
+      setMf(null);
+      toast("Membro adicionado: " + mf.nome.trim());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao criar usuário");
+      setMerrs({ form: err instanceof Error ? err.message : "Erro ao adicionar membro" });
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Remover este membro da família? Ele perde o acesso imediatamente.")) return;
-    setError("");
-    try {
-      const res = await apiFetch(`/api/usuarios/${id}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const data = await res.json();
-        throw new Error(data.error);
-      }
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao remover usuário");
-    }
-  }
+  const askDeleteUser = (u: Usuario) => askConfirm({
+    title: "Remover membro?",
+    body: `${u.name} não vai mais conseguir entrar nem ver os dados da família. Os lançamentos já feitos continuam salvos.`,
+    label: "Remover",
+    action: async () => {
+      const res = await apiFetch(`/api/usuarios/${u.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) { toast("Não foi possível remover o membro."); return; }
+      setMembros((list) => list.filter((x) => x.id !== u.id));
+      toast("Membro removido: " + u.name);
+    },
+  });
 
-  if (!isAdmin) {
-    return (
-      <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Apenas o administrador da família pode gerenciar usuários.
-        </p>
-      </div>
-    );
-  }
+  const header = <PageHeader title="Membros da família" sub="Os membros veem e lançam nos mesmos dados da família." action={{ label: "Novo membro", onClick: () => { setMf({ nome: "", email: "", senha: "" }); setMerrs({}); } }} />;
+  if (error) return <>{header}<ErrorBanner title="Não foi possível carregar os membros" detail={error} onRetry={load} /></>;
+  if (loading || !me) return <>{header}<LoadingSkeleton /></>;
+
+  // A API lista só os membros; o próprio admin entra no topo da lista.
+  const rows: Row[] = [
+    { id: me.id, name: me.name || me.email, email: me.email, created_at: "", admin: true, isYou: true },
+    ...membros.map((u) => ({ ...u, admin: false, isYou: false })),
+  ];
+  const roleTag = (u: Row, small?: boolean) => (
+    <span className="tag" style={{ padding: small ? "2px 8px" : undefined, background: u.admin ? "var(--color-accent-100)" : "transparent", color: u.admin ? "var(--color-accent-800)" : "var(--color-neutral-800)", boxShadow: `inset 0 0 0 1px ${u.admin ? "transparent" : "var(--color-divider)"}` }}>
+      {u.admin ? "Administrador" : "Membro"}
+    </span>
+  );
+  const avatar = (u: Row, s: number) => (
+    <span className="font-heading" style={{ width: s, height: s, flex: "none", display: "grid", placeItems: "center", background: "var(--color-accent-100)", color: "var(--color-accent-800)", fontSize: s * 0.47 }}>
+      {u.name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+  const nameEl = (u: Row, fs: number) => (
+    <span style={{ fontSize: fs, fontWeight: 500 }}>{u.name}{u.isYou && <span className="muted" style={{ fontWeight: 400 }}> (você)</span>}</span>
+  );
+  const delBtn = (u: Row, s?: number) => !u.admin && (
+    <button type="button" className="btn btn-ghost btn-icon" onClick={() => askDeleteUser(u)} aria-label="Remover membro" title="Remover membro" style={{ width: s, height: s, color: "var(--color-text)" }}>
+      <Icon name="trash" size={17} />
+    </button>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Usuários</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Membros da família com acesso ao controle financeiro
-          </p>
-        </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Novo usuário
-        </button>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mt-0.5 h-5 w-5 shrink-0">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-        </svg>
-        <span>
-          O membro criado aqui já pode fazer login com o e-mail e senha definidos —
-          sem precisar confirmar e-mail. Ele enxerga e edita as mesmas contas,
-          transações e categorias que você.
-        </span>
-      </div>
-
-      {error && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
-          {error}
-        </div>
-      )}
-
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
-        >
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Novo usuário</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Nome
-              </label>
-              <input
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Nome completo"
-                className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                E-mail
-              </label>
-              <input
-                required
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="email@exemplo.com"
-                className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Senha inicial
-              </label>
-              <input
-                required
-                type="password"
-                minLength={6}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="Mínimo 6 caracteres"
-                className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {saving ? "Salvando…" : "Salvar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando…</p>
-      ) : usuarios.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-700">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Nenhum membro cadastrado ainda.
-          </p>
+    <>
+      {header}
+      {!compact ? (
+        <div className="blueprint" style={{ padding: "4px 16px 8px" }}>
+          <Corners />
+          <table className="table">
+            <thead><tr><th>Membro</th><th>E-mail</th><th>Papel</th><th>Cadastro</th><th style={{ width: 60 }} /></tr></thead>
+            <tbody>
+              {rows.map((u) => (
+                <tr key={u.id}>
+                  <td><div style={{ display: "flex", alignItems: "center", gap: 12 }}>{avatar(u, 38)}{nameEl(u, 15)}</div></td>
+                  <td className="muted">{u.email}</td>
+                  <td>{roleTag(u)}</td>
+                  <td className="tabular">{u.created_at ? br(u.created_at) : "—"}</td>
+                  <td style={{ textAlign: "right" }}>{delBtn(u)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {usuarios.map((usuario) => (
-            <div
-              key={usuario.id}
-              className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                  {(usuario.name || usuario.email).charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                    {usuario.name}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{usuario.email}</p>
-                </div>
+        <div className="blueprint" style={{ padding: "2px 14px" }}>
+          <Corners />
+          {rows.map((u, idx) => (
+            <div key={u.id} className={idx ? "row-line" : undefined} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0" }}>
+              {avatar(u, 44)}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                {nameEl(u, 16)}
+                <span className="muted" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</span>
+                <span className="muted" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>{roleTag(u, true)}{u.created_at && `desde ${br(u.created_at)}`}</span>
               </div>
-              <button
-                onClick={() => handleDelete(usuario.id)}
-                className="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400"
-              >
-                Remover
-              </button>
+              {delBtn(u, 44)}
             </div>
           ))}
         </div>
       )}
-    </div>
+      {membros.length === 0 && (
+        <p className="muted" style={{ margin: 0, fontSize: 15 }}>Você ainda não cadastrou ninguém. Use “Novo membro” para dar acesso à família.</p>
+      )}
+
+      <Modal open={!!mf} onClose={() => setMf(null)} width={480}>
+        {mf && (
+          <>
+            <ModalHeader title="Novo membro" sub="Os membros veem e lançam nos mesmos dados da família." onClose={() => setMf(null)} />
+            <form onSubmit={saveMember} noValidate style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {merrs.form && (
+                <div role="alert" style={{ display: "flex", gap: 10, padding: "12px 14px", border: "1px solid var(--color-neg)", background: "var(--color-neg-bg)", fontSize: 14 }}>
+                  <Icon name="alert" size={18} /><span>{merrs.form}</span>
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="m-nome">Nome completo</label>
+                <input id="m-nome" className="input" autoFocus placeholder="Ex.: Lia Souza" value={mf.nome} onChange={(e) => setM("nome", e.target.value)} aria-invalid={!!merrs.nome || undefined} />
+                <FieldError msg={merrs.nome} />
+              </div>
+              <div className="field">
+                <label htmlFor="m-email">E-mail</label>
+                <input id="m-email" className="input" type="text" inputMode="email" placeholder="nome@email.com" value={mf.email} onChange={(e) => setM("email", e.target.value)} aria-invalid={!!merrs.email || undefined} />
+                <FieldError msg={merrs.email} />
+              </div>
+              <div className="field">
+                <label htmlFor="m-senha">Senha</label>
+                <PasswordInput id="m-senha" autoComplete="new-password" placeholder="Mínimo de 6 caracteres" value={mf.senha} onChange={(v) => setM("senha", v)} invalid={!!merrs.senha} />
+                <div style={{ marginTop: 6, fontSize: 13, color: merrs.senha ? "var(--color-neg)" : "var(--color-neutral-700)" }}>
+                  {merrs.senha || "Mínimo de 6 caracteres. Passe a senha para a pessoa entrar."}
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", paddingTop: 4 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setMf(null)} style={{ minHeight: "var(--ctl-h)", padding: "0 18px", fontSize: 16 }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary blueprint" disabled={saving} style={{ minHeight: "var(--ctl-h)", padding: "0 22px", fontSize: 16 }}>
+                  {saving ? "Adicionando…" : "Adicionar membro"}<Corners />
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+      </Modal>
+    </>
   );
 }
