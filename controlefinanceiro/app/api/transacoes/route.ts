@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { dbError } from "@/lib/api-errors";
 import { getAuthUser, getFamilyId } from "@/lib/auth-server";
 
 export async function GET(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
     .order("data_vencimento", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "transacoes:GET");
   }
 
   return NextResponse.json({ transacoes: data });
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "transacoes:POST");
   }
 
   return NextResponse.json({ transacao: data }, { status: 201 });

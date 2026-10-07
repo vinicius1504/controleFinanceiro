@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { authError } from "@/lib/api-errors";
 import { getAuthUser } from "@/lib/auth-server";
 
 // DELETE /api/usuarios/:id — remove um membro da família (só o admin dono
@@ -30,7 +31,7 @@ export async function DELETE(
   const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return authError(error, "usuarios:excluir", 500);
   }
 
   return new NextResponse(null, { status: 204 });

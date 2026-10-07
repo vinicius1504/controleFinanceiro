@@ -40,7 +40,7 @@ export default function Cadastro() {
         router.push("/dashboard");
       } else {
         // Projeto com confirmação de e-mail ligada: não há sessão até confirmar.
-        router.push("/login");
+        router.push(`/login?confirmar=${encodeURIComponent(f.email.trim())}`);
       }
     } catch {
       setErrs({ form: "Erro ao conectar com o servidor." });

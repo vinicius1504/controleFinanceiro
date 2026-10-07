@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { dbError } from "@/lib/api-errors";
 import { getAuthUser, getFamilyId } from "@/lib/auth-server";
 
 export async function PUT(
@@ -27,7 +28,7 @@ export async function PUT(
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "categorias:id:PUT");
   }
 
   if (!data) {
@@ -55,7 +56,7 @@ export async function DELETE(
     .eq("user_id", getFamilyId(auth.user));
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "categorias:id:DELETE");
   }
 
   if (!count) {

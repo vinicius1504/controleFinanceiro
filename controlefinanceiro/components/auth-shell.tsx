@@ -3,7 +3,7 @@
 import { Corners, Icon, Logo, ThemeToggleButton, useCompact } from "./ui";
 
 /** Layout das telas de login/cadastro: painel azul à esquerda (desktop) e formulário à direita. */
-export function AuthShell({ error, children }: { error?: string; children: React.ReactNode }) {
+export function AuthShell({ error, info, children }: { error?: string; info?: React.ReactNode; children: React.ReactNode }) {
   const compact = useCompact();
   const onField = "var(--color-on-field)";
   return (
@@ -47,6 +47,11 @@ export function AuthShell({ error, children }: { error?: string; children: React
         </div>
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 0" }}>
           <div style={{ width: "100%", maxWidth: 400, display: "flex", flexDirection: "column", gap: 22 }}>
+            {info && !error && (
+              <div role="status" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", border: "1px solid var(--color-pos)", background: "var(--color-pos-bg)", fontSize: 14 }}>
+                <span style={{ color: "var(--color-pos)" }}><Icon name="inbox" size={18} /></span><span>{info}</span>
+              </div>
+            )}
             {error && (
               <div role="alert" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", border: "1px solid var(--color-neg)", background: "var(--color-neg-bg)", fontSize: 14 }}>
                 <span style={{ color: "var(--color-neg)" }}><Icon name="alert" size={18} /></span><span>{error}</span>

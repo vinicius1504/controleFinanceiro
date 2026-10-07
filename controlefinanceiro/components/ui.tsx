@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { br, fromBr, maskDate } from "@/lib/format";
 
 /* ─── Marcas de registro "+" dos cantos (classe .blueprint) ─── */
 export function Corners({ color }: { color?: string }) {
@@ -45,6 +46,7 @@ const ICONS: Record<string, React.ReactNode> = {
   circleCheck: (<><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></>),
   arrowDown: (<><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></>),
   arrowUp: (<><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></>),
+  calendar: (<><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>),
 };
 
 export function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: keyof typeof ICONS | string; size?: number; strokeWidth?: number }) {
@@ -142,6 +144,27 @@ export function PasswordInput({ id, value, onChange, placeholder, autoComplete, 
       <input id={id} className="input" type={show ? "text" : "password"} autoComplete={autoComplete} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid || undefined} style={{ paddingRight: 48 }} />
       <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShow(!show)} aria-label={label} title={label} style={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, color: "var(--color-neutral-700)" }}>
         <Icon name={show ? "eyeOff" : "eye"} size={18} />
+      </button>
+    </div>
+  );
+}
+
+/** Campo de data "dd/mm/aaaa": dá para digitar ou escolher no calendário nativo do navegador. */
+export function DateInput({ id, value, onChange, invalid, style }: { id: string; value: string; onChange: (v: string) => void; invalid?: boolean; style?: React.CSSProperties }) {
+  const picker = useRef<HTMLInputElement>(null);
+  function abrir() {
+    const el = picker.current;
+    if (!el) return;
+    try { el.showPicker(); } catch { el.focus(); el.click(); }
+  }
+  return (
+    <div style={{ position: "relative", ...style }}>
+      <input id={id} className="input tabular" inputMode="numeric" placeholder="dd/mm/aaaa" value={value} onChange={(e) => onChange(maskDate(e.target.value))} aria-invalid={invalid || undefined} style={{ paddingRight: 48 }} />
+      {/* Input nativo invisível, posicionado sob o botão para o calendário abrir ali. */}
+      <input ref={picker} type="date" tabIndex={-1} aria-hidden="true" value={fromBr(value) ?? ""} onChange={(e) => e.target.value && onChange(br(e.target.value))}
+        style={{ position: "absolute", right: 2, bottom: 0, width: 40, height: 1, opacity: 0, pointerEvents: "none", border: 0, padding: 0 }} />
+      <button type="button" className="btn btn-ghost btn-icon" onClick={abrir} aria-label="Escolher no calendário" title="Escolher no calendário" style={{ position: "absolute", right: 2, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, color: "var(--color-neutral-700)" }}>
+        <Icon name="calendar" size={18} />
       </button>
     </div>
   );

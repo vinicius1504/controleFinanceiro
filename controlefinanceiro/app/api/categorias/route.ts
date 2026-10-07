@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { dbError } from "@/lib/api-errors";
 import { getAuthUser, getFamilyId } from "@/lib/auth-server";
 
 export async function GET(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
     .order("nome", { ascending: true });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "categorias:GET");
   }
 
   return NextResponse.json({ categorias: data });
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return dbError(error, "categorias:POST");
   }
 
   return NextResponse.json({ categoria: data }, { status: 201 });

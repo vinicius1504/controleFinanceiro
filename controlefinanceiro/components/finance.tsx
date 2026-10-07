@@ -3,8 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { addMonthsClamped } from "@/lib/dates";
-import { br, fmt, fromBr, maskDate, maskMoney, num2, pad, parseMoney, RECORRENCIAS, splitParcel, todayISO } from "@/lib/format";
-import { CheckRow, ConfirmDialog, Corners, FieldError, Icon, Modal, ModalHeader, useToast } from "./ui";
+import { br, fmt, fromBr, maskMoney, num2, pad, parseMoney, RECORRENCIAS, splitParcel, todayISO } from "@/lib/format";
+import { CheckRow, ConfirmDialog, Corners, DateInput, FieldError, Icon, Modal, ModalHeader, useToast } from "./ui";
 
 export type Categoria = { id: string; nome: string; cor: string | null };
 
@@ -348,7 +348,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
               <div className="field">
                 <label htmlFor="f-venc">{isContaF ? "Data de vencimento" : "Data prevista"}</label>
-                <input id="f-venc" className="input tabular" inputMode="numeric" placeholder="dd/mm/aaaa" value={F.venc} onChange={(e) => setF({ venc: maskDate(e.target.value) })} aria-invalid={!!errs.venc || undefined} style={{ maxWidth: 220 }} />
+                <DateInput id="f-venc" value={F.venc} onChange={(v) => setF({ venc: v })} invalid={!!errs.venc} style={{ maxWidth: 220 }} />
                 <FieldError msg={errs.venc} />
               </div>
 
@@ -371,7 +371,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
                 {F.pago && (
                   <div className="field" style={{ width: 200 }}>
                     <label htmlFor="f-pag">{isContaF ? "Data de pagamento" : "Data de recebimento"}</label>
-                    <input id="f-pag" className="input tabular" inputMode="numeric" placeholder="dd/mm/aaaa" value={F.dataPag} onChange={(e) => setF({ dataPag: maskDate(e.target.value) })} aria-invalid={!!errs.dataPag || undefined} />
+                    <DateInput id="f-pag" value={F.dataPag} onChange={(v) => setF({ dataPag: v })} invalid={!!errs.dataPag} />
                   </div>
                 )}
                 {errs.dataPag && <div className="field-error" style={{ width: "100%", marginTop: 0 }}>{errs.dataPag}</div>}

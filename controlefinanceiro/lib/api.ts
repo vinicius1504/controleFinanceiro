@@ -15,7 +15,9 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     },
   });
 
-  if (res.status === 401 && typeof window !== "undefined") {
+  // 401 só significa "sessão expirada" quando havia sessão. No login, é senha
+  // errada e a própria tela mostra o erro, sem recarregar a página.
+  if (res.status === 401 && token && !path.startsWith("/api/auth/") && typeof window !== "undefined") {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     window.location.href = "/login";

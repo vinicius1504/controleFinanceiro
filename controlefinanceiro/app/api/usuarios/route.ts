@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { authError } from "@/lib/api-errors";
 import { getAuthUser } from "@/lib/auth-server";
 
 // GET /api/usuarios — lista os membros da família criados por este admin
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 200 });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return authError(error, "usuarios:listar", 500);
   }
 
   const usuarios = data.users
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return authError(error, "usuarios:criar");
   }
 
   return NextResponse.json(

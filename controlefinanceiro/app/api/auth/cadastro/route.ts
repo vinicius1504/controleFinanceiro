@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase-server";
+import { authError } from "@/lib/api-errors";
 
 export async function POST(req: NextRequest) {
   const { name, email, password } = await req.json();
@@ -29,7 +30,16 @@ export async function POST(req: NextRequest) {
   });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return authError(error, "cadastro");
+  }
+
+  // Com confirmação de e-mail ligada, o Supabase não acusa e-mail repetido:
+  // devolve um usuário "falso" sem identidades, e nenhum e-mail é enviado.
+  if (data.user && data.user.identities?.length === 0) {
+    return NextResponse.json(
+      { error: "Já existe uma conta com esse e-mail. Faça login ou confirme o e-mail que enviamos.", code: "user_already_exists" },
+      { status: 409 }
+    );
   }
 
   return NextResponse.json(

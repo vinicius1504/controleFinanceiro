@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
@@ -15,6 +15,15 @@ export default function Login() {
   const [lembrar, setLembrar] = useState(true);
   const [busy, setBusy] = useState(false);
   const [errs, setErrs] = useState<{ email?: string; senha?: string; form?: string }>({});
+  const [info, setInfo] = useState<React.ReactNode>();
+
+  // Vindo do cadastro com confirmação de e-mail pendente (?confirmar=email).
+  useEffect(() => {
+    const pendente = new URLSearchParams(window.location.search).get("confirmar");
+    if (!pendente) return;
+    setEmail(pendente);
+    setInfo(<>Conta criada! Enviamos um link de confirmação para <strong>{pendente}</strong>. Abra o e-mail (veja também o spam), clique no link e depois entre aqui.</>);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,7 +37,7 @@ export default function Login() {
       const res = await apiFetch("/api/auth/login", { method: "POST", body: JSON.stringify({ email: email.trim(), password }) });
       const data = await res.json();
       if (!res.ok) {
-        setErrs({ form: res.status === 401 ? "E-mail ou senha incorretos. Confira e tente de novo." : data.error });
+        setErrs({ form: data.error || "Não foi possível entrar agora. Tente de novo em instantes." });
         return;
       }
       localStorage.setItem("token", data.session.access_token);
@@ -42,7 +51,7 @@ export default function Login() {
   }
 
   return (
-    <AuthShell error={errs.form}>
+    <AuthShell error={errs.form} info={info}>
       <div>
         <h1 style={{ fontSize: 44, margin: "0 0 6px" }}>Entrar</h1>
         <p className="muted" style={{ margin: 0 }}>Acesse as finanças da sua família.</p>
